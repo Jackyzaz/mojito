@@ -171,6 +171,29 @@ def thaiwater_waterlevel_year(session, station_id, year):
     ]
 
 
+def thaiwater_waterlevel_range(session, station_id, start_date, end_date):
+    """Telemetry water level between two dates, for the live feed."""
+    payload = _get_json(
+        session,
+        f"{THAIWATER_API}/waterlevel_graph",
+        params={
+            "station_type": "tele_waterlevel",
+            "station_id": station_id,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        },
+    )
+    frame = pandas.DataFrame(
+        payload["data"]["graph_data"], columns=["datetime", "value", "discharge"]
+    ).dropna(subset=["value", "discharge"], how="all")
+    if frame.empty:
+        return frame
+    frame["timestamp"] = _localize(frame["datetime"])
+    return frame.rename(columns={"value": "waterlevel_msl"})[
+        ["timestamp", "waterlevel_msl", "discharge"]
+    ]
+
+
 def thaiwater_waterlevel(session, stations, years):
     frames = []
     for code, station in stations.items():
@@ -195,6 +218,21 @@ def thaiwater_rain_month(session, station_id, year, month):
     frame = frame.dropna(subset=["rainfall_value"])
     frame["date"] = pandas.to_datetime(frame["rainfall_datetime"]).dt.date
     return frame.rename(columns={"rainfall_value": "rain_mm"})[["date", "rain_mm"]]
+
+
+def thaiwater_rain_24h(session):
+    """Latest 24-hour rain total of every gauge (rolling, not a calendar day)."""
+    payload = _get_json(session, f"{THAIWATER_API}/rain_24h")
+    return pandas.DataFrame(
+        [
+            {
+                "station_id": record["station"]["id"],
+                "rain_mm": pandas.to_numeric(record["rain_24h"], errors="coerce"),
+                "timestamp": record["rainfall_datetime"],
+            }
+            for record in payload["data"]
+        ]
+    )
 
 
 def thaiwater_rain_months_with_data(session, station_id, year):
@@ -386,6 +424,80 @@ def era5_hourly(session, points, start_year, end_date, chunk_years=5):
             frames.append(frame)
     frame = pandas.concat(frames, ignore_index=True)
     return frame.dropna(subset=ERA5_HOURLY, how="all")
+
+
+OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
+
+
+def open_meteo_forecast_hourly(session, points, model, variables, past_days=0, forecast_days=7):
+    """Latest model run: recent analysis (`past_days`) and the days ahead."""
+    payload = _get_json(
+        session,
+        OPEN_METEO_FORECAST,
+        params={
+            "latitude": ",".join(str(lat) for lat, _ in points),
+            "longitude": ",".join(str(lon) for _, lon in points),
+            "hourly": ",".join(variables),
+            "models": model,
+            "past_days": past_days,
+            "forecast_days": forecast_days,
+            "timezone": config.TIMEZONE,
+        },
+    )
+    frames = []
+    for (lat, lon), location in zip(points, payload):
+        frame = pandas.DataFrame(location["hourly"])
+        frame["timestamp"] = _localize(frame.pop("time"))
+        frame.insert(0, "lat", lat)
+        frame.insert(1, "lon", lon)
+        frames.append(frame)
+    return pandas.concat(frames, ignore_index=True).dropna(subset=variables, how="all")
+
+
+OPEN_METEO_PREVIOUS_RUNS = "https://previous-runs-api.open-meteo.com/v1/forecast"
+# Lead-time archives start in early 2024 for both models
+PREVIOUS_RUNS_START = datetime.date(2024, 3, 1)
+FORECAST_LEADS = range(1, 7)
+
+
+def nwp_rain_previous_runs(session, points, model, start_date, end_date, chunk_days=180):
+    """Hourly rain forecasts as they were issued `lead` days before each hour.
+
+    Open-Meteo stores every past model run, so `precipitation_previous_dayN`
+    is the value the run from N days earlier forecast for that hour. That
+    lets a back-test use only forecasts that existed at the time."""
+    lats = ",".join(str(lat) for lat, _ in points)
+    lons = ",".join(str(lon) for _, lon in points)
+    variables = [f"precipitation_previous_day{lead}" for lead in FORECAST_LEADS]
+    frames = []
+    chunk_start = start_date
+    while chunk_start <= end_date:
+        chunk_end = min(chunk_start + datetime.timedelta(days=chunk_days - 1), end_date)
+        payload = _get_json(
+            session,
+            OPEN_METEO_PREVIOUS_RUNS,
+            params={
+                "latitude": lats,
+                "longitude": lons,
+                "start_date": chunk_start.isoformat(),
+                "end_date": chunk_end.isoformat(),
+                "hourly": ",".join(variables),
+                "models": model,
+                "timezone": config.TIMEZONE,
+            },
+        )
+        for (lat, lon), location in zip(points, payload):
+            frame = pandas.DataFrame(location["hourly"])
+            frame["timestamp"] = _localize(frame.pop("time"))
+            frame = frame.melt(id_vars="timestamp", var_name="lead", value_name="precipitation")
+            frame["lead"] = frame["lead"].str.extract(r"(\d+)$", expand=False).astype(int)
+            frame.insert(0, "lat", lat)
+            frame.insert(1, "lon", lon)
+            frames.append(frame)
+        chunk_start = chunk_end + datetime.timedelta(days=1)
+    frame = pandas.concat(frames, ignore_index=True)
+    frame.insert(0, "model", model)
+    return frame.dropna(subset=["precipitation"])
 
 
 def glofas_daily(session, points, start_date, end_date):

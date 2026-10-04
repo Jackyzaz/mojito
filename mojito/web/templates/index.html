@@ -20,13 +20,13 @@
       <label for="issue-date">ข้อมูล ณ สิ้นวันที่</label>
       <div class="date-row">
         <input type="date" id="issue-date">
+        <button type="button" class="ghost live" id="live-button"><span class="live-dot"></span>ข้อมูลสด</button>
         <button type="button" class="ghost" id="demo-button" data-date="{{ demo_date }}">น้ำท่วม พ.ย. 68</button>
-        <button type="button" class="ghost" id="latest-button">ล่าสุด</button>
       </div>
-      <p class="hint">โหมดย้อนดู: ระบบพยากรณ์จากข้อมูลจริงที่มี ณ สิ้นวันที่เลือก</p>
+      <p class="hint" id="mode-hint">โหมดย้อนดู: ระบบพยากรณ์จากข้อมูลจริงที่มี ณ สิ้นวันที่เลือก</p>
     </section>
 
-    <section class="card status">
+    <section class="card status" id="status-card">
       <div class="status-row">
         <div>
           <div class="label">ระดับน้ำ X.44 (หาดใหญ่ใน) วันนี้</div>
@@ -42,6 +42,7 @@
         </div>
         <span class="badge" id="selected-alert">–</span>
       </div>
+      <div class="model-line" id="model-line"></div>
     </section>
 
     <section class="card">
@@ -56,9 +57,9 @@
 
     <footer class="notes">
       <p><strong>วิธีอ่านแผนที่:</strong> สีของแต่ละโซนคือสัดส่วนพื้นที่ที่คาดว่าจะท่วม คลิกโซนเพื่อดูว่าเริ่มท่วมเมื่อระดับน้ำ X.44 สูงเท่าไร</p>
-      <p><strong>ข้อจำกัด:</strong> ทำนายแม่นยำในช่วง 1–2 วัน ล่วงหน้า 3–5 วันยังไม่มีพยากรณ์ฝนเป็นข้อมูลเข้า ความคลาดเคลื่อนจึงสูง ·
+      <p><strong>ข้อจำกัด:</strong> แม่นยำที่สุดในช่วง 1–2 วัน · ล่วงหน้า 3–5 วันอาศัยพยากรณ์ฝน GFS ซึ่งมักให้ฝนหนักต่ำกว่าจริง ความคลาดเคลื่อนจึงสูง ·
         แผนที่เรียนจากน้ำท่วมครั้งเดียว (พ.ย. 2568) · ต้นแบบเพื่อการศึกษา ไม่ใช่ประกาศเตือนภัยทางการ</p>
-      <p class="source">ข้อมูล: ThaiWater/HII, กรมชลประทาน, ERA5, GloFAS, Copernicus DEM, Sentinel Asia (EOS-RS)</p>
+      <p class="source">ข้อมูล: ThaiWater/HII, กรมชลประทาน, ERA5 และพยากรณ์ฝน GFS/ECMWF (Open-Meteo), GloFAS, Copernicus DEM, Sentinel Asia (EOS-RS)</p>
     </footer>
   </aside>
 

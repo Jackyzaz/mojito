@@ -71,7 +71,14 @@ button {
 button.ghost { color: var(--accent); }
 button:hover { border-color: var(--accent); }
 
-.status { display: flex; flex-direction: column; gap: 10px; }
+.status { display: flex; flex-direction: column; gap: 10px; transition: opacity 0.2s; }
+.status.loading { opacity: 0.45; }
+.model-line { font-size: 0.75rem; color: var(--ink-soft); border-top: 1px solid var(--line); padding-top: 8px; }
+button.live { display: inline-flex; align-items: center; gap: 6px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--flood); }
+button.live.active { background: var(--flood); color: #fff; border-color: var(--flood); }
+button.live.active .live-dot { background: #fff; }
+button:disabled { cursor: progress; opacity: 0.6; }
 .status-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .status-row.selected { border-top: 1px solid var(--line); padding-top: 10px; }
 .value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }

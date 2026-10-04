@@ -96,10 +96,13 @@ class HorizonModel:
         )
 
 
-def save(models, tag):
-    """Store one fitted model per horizon plus a small manifest."""
+def save(models, tag, extra=None):
+    """Store one fitted model per horizon plus a small manifest.
+
+    `extra` is kept in the manifest for settings the caller needs at
+    prediction time, such as which rain forecast feeds the model."""
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    manifest = {"tag": tag, "horizons": {}}
+    manifest = {"tag": tag, "horizons": {}, "extra": extra or {}}
     for model in models:
         path = MODELS_DIR / f"{tag}_h{model.horizon}.joblib"
         joblib.dump(model, path)
@@ -114,8 +117,12 @@ def save(models, tag):
     return manifest_path
 
 
+def load_manifest(tag):
+    return json.loads((MODELS_DIR / f"{tag}.json").read_text())
+
+
 def load(tag):
-    manifest = json.loads((MODELS_DIR / f"{tag}.json").read_text())
+    manifest = load_manifest(tag)
     return [
         joblib.load(MODELS_DIR / entry["path"])
         for _, entry in sorted(manifest["horizons"].items(), key=lambda item: int(item[0]))

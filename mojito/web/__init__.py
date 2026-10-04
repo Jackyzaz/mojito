@@ -45,6 +45,14 @@ def create_app():
         except (KeyError, ValueError) as error:
             abort(404, description=str(error))
 
+    @app.get("/api/forecast/live")
+    def forecast_live():
+        try:
+            return jsonify(service.forecast_live())
+        except Exception as error:  # an upstream API being down must not crash the page
+            app.logger.exception("live forecast failed")
+            abort(503, description=f"ดึงข้อมูลสดไม่สำเร็จ: {error}")
+
     return app
 
 

@@ -186,6 +186,59 @@ def build_daily_table(waterlevel_raw, era5, rain_gauge, glofas, oni):
 
 
 def feature_columns(table):
-    """Columns a model may use: everything known at the end of day t."""
-    excluded = ("target_", "oracle_", "split")
+    """Columns a model may use: everything known at the end of day t.
+
+    Forecast rain (`nwp_*`) is known at day t too, but only from 2024, so it
+    is opted into explicitly by the models that use it."""
+    excluded = ("target_", "oracle_", "split", "nwp_", "rain_next")
     return [c for c in table.columns if not c.startswith(excluded)]
+
+
+# Rain forecasts are taken from the run one day older than the lead needs:
+# the run issued during day t-1 is surely published by the end of day t
+FORECAST_LEAD_OFFSET = 1
+
+
+def nwp_daily_rain(nwp_rain):
+    """Hourly previous-run forecasts -> basin mean daily rain per (model, lead)."""
+    frame = nwp_rain.assign(date=nwp_rain["timestamp"].dt.tz_localize(None).dt.normalize())
+    per_point = frame.groupby(["model", "lead", "lat", "lon", "date"])["precipitation"].sum()
+    daily = per_point.groupby(["model", "lead", "date"]).mean().unstack(["model", "lead"])
+    return daily.sort_index(axis=1)
+
+
+def add_forecast_rain(table, nwp_daily, model, scale=None):
+    """Columns `nwp_{model}_rain_next{h}d`: forecast basin rain over t+1..t+h.
+
+    `scale` maps horizon -> multiplier that corrects the model's rain bias."""
+    table = table.copy()
+    days = []
+    for k in HORIZONS:
+        lead = k + FORECAST_LEAD_OFFSET
+        valid_day = nwp_daily[(model, lead)].reindex(table.index + pandas.Timedelta(days=k))
+        days.append(valid_day.to_numpy())
+    days = numpy.column_stack(days)
+    for horizon in HORIZONS:
+        total = days[:, :horizon].sum(axis=1)
+        total[numpy.isnan(days[:, :horizon]).any(axis=1)] = numpy.nan
+        if scale is not None:
+            total = total * scale[horizon]
+        table[f"nwp_{model}_rain_next{horizon}d"] = total
+    return table
+
+
+def combine_forecast_rain(table, setup):
+    """`rain_next{h}d` model input from the per-model `nwp_*` columns.
+
+    `setup` is the "rain" block of a model manifest: the forecast models to
+    average and whether to apply their bias multipliers."""
+    table = table.copy()
+    for horizon in HORIZONS:
+        values = []
+        for model in setup["nwp_models"]:
+            column = table[f"nwp_{model}_rain_next{horizon}d"]
+            if setup["scaled"]:
+                column = column * setup["scale"][model][str(horizon)]
+            values.append(column)
+        table[f"rain_next{horizon}d"] = sum(values) / len(values)
+    return table

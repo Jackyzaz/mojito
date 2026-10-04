@@ -21,16 +21,21 @@ uv run jupyter lab
 | `notebooks/03_feature_engineering.ipynb` | ทำความสะอาดข้อมูล สร้าง feature/target รายวันสำหรับทำนายระดับน้ำ X.44 ล่วงหน้า 1–5 วัน → `data/processed/features_daily.parquet` |
 | `notebooks/04_baseline_models.ipynb` | เทียบ persistence / Ridge / LightGBM ทำนายระดับน้ำ X.44 ล่วงหน้า 1–5 วัน, ทดลองเพดานความแม่นยำเมื่อรู้ฝนล่วงหน้า → `data/models/` |
 | `notebooks/05_flood_zones.ipynb` | โมเดลความเสี่ยงรายจุดจาก DEM + น้ำท่วมจริง พ.ย. 2568, ระดับวิกฤตของแต่ละจุด, โซน H3 → `data/processed/zones_h3.geojson` |
+| `notebooks/06_forecast_rain.ipynb` | เพิ่มพยากรณ์ฝน (Open-Meteo Previous Runs: ECMWF / GFS) เป็น feature สำหรับล่วงหน้า 3–5 วัน → `data/models/x44_ridge_delta_nwp*` |
+| `notebooks/07_lstm.ipynb` | LSTM (PyTorch) เทียบกับ Ridge / LightGBM บนชุดทดสอบเดียวกัน |
 
 ## เว็บ POC
 
-แผนที่ความเสี่ยงน้ำท่วมรายโซนพร้อม slider พยากรณ์ 5 วัน (ต้องรัน notebook 01–05 ก่อนเพื่อสร้างข้อมูลและโมเดล)
+แผนที่ความเสี่ยงน้ำท่วมรายโซนพร้อม slider พยากรณ์ 5 วัน (ต้องรัน notebook 01–06 ก่อนเพื่อสร้างข้อมูลและโมเดล)
 
 ```bash
 uv run mojito-web
 ```
 
-แล้วเปิด http://127.0.0.1:5050 — ตอนนี้เป็นโหมดย้อนดู: เลือกวันที่แล้วระบบพยากรณ์จากข้อมูลที่มี ณ สิ้นวันนั้น
+แล้วเปิด http://127.0.0.1:5050
+
+- **โหมดย้อนดู:** เลือกวันที่ ระบบพยากรณ์จากข้อมูลที่มี ณ สิ้นวันนั้น (ปุ่ม "น้ำท่วม พ.ย. 68" สำหรับสาธิต)
+- **ข้อมูลสด:** ปุ่ม "ข้อมูลสด" ดึงข้อมูลสถานีและพยากรณ์ฝนล่าสุดแล้วพยากรณ์ทันที (~30 วินาที, cache 30 นาที)
 
 ## โครงสร้าง
 
@@ -40,6 +45,9 @@ mojito/sources.py   ฟังก์ชันดึงข้อมูลแต่
 mojito/features.py  ทำความสะอาดข้อมูลและสร้าง feature/target รายวัน
 mojito/models.py    โมเดลทำนายระดับน้ำ X.44 ต่อ horizon (บันทึก/โหลด)
 mojito/spatial.py   terrain features, ระดับวิกฤต, ความน่าจะเป็นท่วมรายโซน
+mojito/evaluation.py ตัวชี้วัดร่วม (MAE วันน้ำหลาก, การเตือนภัย)
+mojito/realtime.py  โหมดข้อมูลสด: ดึงข้อมูลล่าสุดแล้วสร้าง feature ของวันนี้
+mojito/lstm.py      โมเดล LSTM (PyTorch)
 mojito/web/         Flask + Leaflet POC
 docs/               สำรวจแหล่งข้อมูล
 resources/          ขอบเขตหาดใหญ่และลุ่มน้ำ (GeoJSON จาก sindhu)

@@ -113,9 +113,25 @@ function renderStatus() {
   document.getElementById("selected-label").textContent = `คาดการณ์ ${thaiDate(h.date, true)} (+${h.h} วัน)`;
   document.getElementById("selected-stage").textContent = `${h.stage.toFixed(2)} ± ${h.sigma.toFixed(1)} ม.`;
   const observed = h.observed !== null ? ` · วัดได้จริง ${h.observed.toFixed(2)} ม.` : "";
+  const previous = state.horizon > 1 ? f.horizons[state.horizon - 2].rain_forecast_total_mm : 0;
+  const rain = h.rain_forecast_total_mm !== null ? ` · ฝนพยากรณ์วันนั้น ~${Math.round(h.rain_forecast_total_mm - previous)} มม.` : "";
   document.getElementById("selected-detail").textContent =
-    `พื้นที่คาดว่าท่วม ~${h.flooded_km2} ตร.กม. · ${h.zones_at_risk} โซนเสี่ยงสูง${observed}`;
+    `พื้นที่คาดว่าท่วม ~${h.flooded_km2} ตร.กม. · ${h.zones_at_risk} โซนเสี่ยงสูง${rain}${observed}`;
   setBadge(document.getElementById("selected-alert"), h.alert);
+  document.getElementById("model-line").textContent = `โมเดล: ${f.model_label}`;
+}
+
+function renderModeHint() {
+  const f = state.forecast;
+  const hint = document.getElementById("mode-hint");
+  if (f.mode === "live") {
+    const time = (iso) => iso.slice(11, 16);
+    hint.textContent = `ข้อมูลสด ดึงเมื่อ ${thaiDate(f.live.fetched_at.slice(0, 10))} ${time(f.live.fetched_at)} น. · ` +
+      `X.44 อ่านล่าสุด ${time(f.live.x44_last_reading)} น. · ข้อมูลวันนี้ยังไม่ครบวัน`;
+  } else {
+    hint.textContent = "โหมดย้อนดู: ระบบพยากรณ์จากข้อมูลจริงที่มี ณ สิ้นวันที่เลือก";
+  }
+  document.getElementById("live-button").classList.toggle("active", f.mode === "live");
 }
 
 function renderChart() {
@@ -183,14 +199,27 @@ function selectHorizon(h) {
 }
 
 async function loadForecast(date) {
+  const live = date === "live";
+  const card = document.getElementById("status-card");
+  const liveButton = document.getElementById("live-button");
+  card.classList.add("loading");
+  if (live) {
+    liveButton.disabled = true;
+    document.getElementById("mode-hint").textContent = "กำลังดึงข้อมูลล่าสุดจากสถานีและพยากรณ์ฝน (~30 วินาที)…";
+  }
   try {
-    state.forecast = await loadJSON(`/api/forecast?date=${date}`);
+    state.forecast = await loadJSON(live ? "/api/forecast/live" : `/api/forecast?date=${date}`);
   } catch (error) {
     alert(`โหลดพยากรณ์ไม่สำเร็จ: ${error.message}`);
+    if (state.forecast) renderModeHint();
     return;
+  } finally {
+    card.classList.remove("loading");
+    liveButton.disabled = false;
   }
   document.getElementById("issue-date").value = state.forecast.issued;
-  history.replaceState(null, "", `?date=${state.forecast.issued}`);
+  history.replaceState(null, "", `?date=${live ? "live" : state.forecast.issued}`);
+  renderModeHint();
   selectHorizon(state.horizon);
 }
 
@@ -209,7 +238,7 @@ document.getElementById("play-button").addEventListener("click", () => {
 
 document.getElementById("issue-date").addEventListener("change", (event) => loadForecast(event.target.value));
 document.getElementById("demo-button").addEventListener("click", (event) => loadForecast(event.target.dataset.date));
-document.getElementById("latest-button").addEventListener("click", () => loadForecast(state.dates.last));
+document.getElementById("live-button").addEventListener("click", () => loadForecast("live"));
 
 (async function init() {
   state.dates = await loadJSON("/api/dates");
