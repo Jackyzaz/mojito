@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>พรุ่งนี้น้ำจะท่วมไหมนะ? · หาดใหญ่</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <aside class="panel">
+    <header>
+      <h1>พรุ่งนี้น้ำจะท่วมไหมนะ?</h1>
+      <p class="subtitle">พยากรณ์ความเสี่ยงน้ำท่วม อ.หาดใหญ่ ล่วงหน้า 5 วัน</p>
+    </header>
+
+    <section class="card controls">
+      <label for="issue-date">ข้อมูล ณ สิ้นวันที่</label>
+      <div class="date-row">
+        <input type="date" id="issue-date">
+        <button type="button" class="ghost" id="demo-button" data-date="{{ demo_date }}">น้ำท่วม พ.ย. 68</button>
+        <button type="button" class="ghost" id="latest-button">ล่าสุด</button>
+      </div>
+      <p class="hint">โหมดย้อนดู: ระบบพยากรณ์จากข้อมูลจริงที่มี ณ สิ้นวันที่เลือก</p>
+    </section>
+
+    <section class="card status">
+      <div class="status-row">
+        <div>
+          <div class="label">ระดับน้ำ X.44 (หาดใหญ่ใน) วันนี้</div>
+          <div class="value" id="today-stage">–</div>
+        </div>
+        <span class="badge" id="today-alert">–</span>
+      </div>
+      <div class="status-row selected">
+        <div>
+          <div class="label" id="selected-label">คาดการณ์</div>
+          <div class="value" id="selected-stage">–</div>
+          <div class="detail" id="selected-detail"></div>
+        </div>
+        <span class="badge" id="selected-alert">–</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">ระดับน้ำ X.44 ย้อนหลัง 10 วัน และพยากรณ์ 5 วัน (ม.รทก.)</div>
+      <svg id="chart" viewBox="0 0 360 190" role="img" aria-label="กราฟระดับน้ำ X.44"></svg>
+      <div class="chart-legend">
+        <span><i class="swatch line"></i>วัดจริง</span>
+        <span><i class="swatch dashed"></i>พยากรณ์</span>
+        <span><i class="swatch band"></i>ช่วงความคลาดเคลื่อน</span>
+      </div>
+    </section>
+
+    <footer class="notes">
+      <p><strong>วิธีอ่านแผนที่:</strong> สีของแต่ละโซนคือสัดส่วนพื้นที่ที่คาดว่าจะท่วม คลิกโซนเพื่อดูว่าเริ่มท่วมเมื่อระดับน้ำ X.44 สูงเท่าไร</p>
+      <p><strong>ข้อจำกัด:</strong> ทำนายแม่นยำในช่วง 1–2 วัน ล่วงหน้า 3–5 วันยังไม่มีพยากรณ์ฝนเป็นข้อมูลเข้า ความคลาดเคลื่อนจึงสูง ·
+        แผนที่เรียนจากน้ำท่วมครั้งเดียว (พ.ย. 2568) · ต้นแบบเพื่อการศึกษา ไม่ใช่ประกาศเตือนภัยทางการ</p>
+      <p class="source">ข้อมูล: ThaiWater/HII, กรมชลประทาน, ERA5, GloFAS, Copernicus DEM, Sentinel Asia (EOS-RS)</p>
+    </footer>
+  </aside>
+
+  <main class="map-wrap">
+    <div id="map"></div>
+    <div class="day-bar card">
+      <button type="button" id="play-button" class="play" aria-label="เล่นอนิเมชัน">▶</button>
+      <div class="days" id="day-buttons"></div>
+    </div>
+    <div class="legend card">
+      <div class="label">สัดส่วนพื้นที่โซนที่คาดว่าจะท่วม</div>
+      <div class="ramp"></div>
+      <div class="ramp-ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+    </div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

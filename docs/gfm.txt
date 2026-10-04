@@ -1,0 +1,2 @@
+ensemble_flood_extent https://data.eodc.eu/collections/GFM_LAYERS/flood_extent/OC020M/2025/11/23/ENSEMBLE_FLOOD_20251123T230334_VV_OC020M_E033N102T3.tif image/tiff; application=geotiff; profile=cloud-optimized
+tuw_flood_extent https://data.eodc.eu/collections/GFM_NRT_INTERIM/flood_extent/OC020M/2025/11/23/TUW_FLOOD_20251123T230334_VV_OC020M_E033N102T3.tif image/tiff; application=geotiff; profile=cloud-optimized

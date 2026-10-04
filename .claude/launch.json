@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mojito-web",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "mojito-web"],
+      "port": 5050
+    }
+  ]
+}
