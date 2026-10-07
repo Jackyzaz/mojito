@@ -25,12 +25,20 @@ MODEL_NAME = "lstm"
 MODEL_LABEL = "LSTM (ระยะจากตลิ่ง 6 สถานี + ฝน) + พยากรณ์ฝน GFS"
 MODELS_DIR = config.DATA_DIR / "models"
 LIVE_CACHE = datetime.timedelta(minutes=30)
+MODEL_STEP = "LSTM พยากรณ์ + แผนที่รายโซน"
+# Every step of a live forecast, as (group, label), in the order `progress` is called
+LIVE_STEPS = realtime.STEPS + [("model", MODEL_STEP)]
 # Zones whose expected flooded share is below this are drawn transparent
 MIN_SHARE_SHOWN = 0.02
 
+BANK_M = features.ALERT_LEVELS["ล้นตลิ่ง"]
+# Within this distance below the X.44 bank the page shows a "near bank" warning
+NEAR_BANK_M = 1.0
+
 ALERT_STEPS = [
-    (0.0, "normal", "ปกติ"),
-    (features.ALERT_LEVELS["ล้นตลิ่ง"], "bank", "น้ำล้นตลิ่ง"),
+    (float("-inf"), "normal", "ปกติ"),
+    (BANK_M - NEAR_BANK_M, "watch", "ใกล้ตลิ่ง"),
+    (BANK_M, "bank", "ล้นตลิ่ง"),
     (features.ALERT_LEVELS["ท่วมพื้นที่ลุ่มต่ำ"], "flood", "ท่วมพื้นที่ลุ่มต่ำ"),
 ]
 
@@ -81,11 +89,15 @@ class ForecastService:
         result["mode"] = "replay"
         return result
 
-    def forecast_live(self):
+    def forecast_live(self, progress=None):
+        """Live forecast, cached for LIVE_CACHE. `progress(label)` is called as each of LIVE_STEPS starts
+        (not at all on a cache hit)."""
         with self._live_lock:
             if self._live and datetime.datetime.now() - self._live[0] < LIVE_CACHE:
                 return self._live[1]
-            table, issue_day, info = realtime.build_live_table(self.gfs_scale)
+            table, issue_day, info = realtime.build_live_table(self.gfs_scale, progress=progress)
+            if progress:
+                progress(MODEL_STEP)
             result = self._predict(table, issue_day)
             result.update(mode="live", live=info)
             self._live = (datetime.datetime.now(), result)
@@ -128,6 +140,7 @@ class ForecastService:
             "history": [{"date": d.date().isoformat(), "stage": _round(v)} for d, v in history.items()],
             "horizons": horizons,
             "alert_levels": dict(features.ALERT_LEVELS),
+            "near_bank_m": NEAR_BANK_M,
         }
 
 

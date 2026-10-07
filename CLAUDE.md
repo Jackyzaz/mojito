@@ -25,13 +25,14 @@ GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR uv run jupyter nbconvert --to notebook --
 
 ### Minimal pipeline (`notebook/`, the one presented to the instructor)
 
-Small LSTM-only pipeline meant to be explained end to end. Run 01 → 03:
+Small LSTM pipeline plus the zone map, meant to be explained end to end. Run 01 → 04:
 
 | Notebook | Writes |
 |---|---|
-| 01_data | `data/raw/` stations, waterlevel_tele, era5_hourly, nwp_rain_previous_runs (same files as the full pipeline; skips existing) |
+| 01_data | `data/raw/` stations, waterlevel_tele, era5_hourly, nwp_rain_previous_runs, eosrs_flood_2025, dem_glo30.tif (same files as the full pipeline; skips existing) |
 | 02_features | `data/processed/minimal_daily.parquet` |
 | 03_lstm | `data/models/x44_lstm.joblib`, `x44_lstm.json` (features, GFS bias multipliers), `uncertainty.json` key `lstm` |
+| 04_flood_zones | `data/processed/zones_h3.geojson` (LightGBM terrain susceptibility → rank → critical stage → H3; demo uses the LSTM) |
 
 - Inputs: daily max **distance to bank** (`{station}_bank` = level − `config.BANK_LEVEL_M`, ThaiWater `min_bank`)
   for X.44, X.90, X.173A, X.174, SLA007, SLA005 + ERA5 basin rain (7 per day, 30-day window), plus
@@ -44,11 +45,12 @@ Small LSTM-only pipeline meant to be explained end to end. Run 01 → 03:
 - The web app serves this LSTM (the same seed-0 model trained to 2024, not refit). Replay always feeds the
   archived bias-corrected GFS forecast (`gfs_rain_next{h}d`), so replay starts at 2024-02-29; test-period replay
   matches notebook 03 exactly. `uncertainty.json["lstm"]` is stage-split RMSE on test (validation has no high water).
-- The web still needs `data/processed/zones_h3.geojson` from `notebooks/archive/05_flood_zones`.
+- The web reads `data/processed/zones_h3.geojson` from notebook 04 (deterministic, `random_state=42`).
 
 ### Full pipeline (`notebooks/archive/`, kept for reference; its Ridge models are no longer served)
 
-Notebooks must run top to bottom in order 01 → 07; each writes the inputs of the next:
+Notebooks must run top to bottom in order 01 → 07; each writes the inputs of the next (05_flood_zones moved to
+`notebook/04_flood_zones`, so 06/07 need its `zones_h3.geojson` from there):
 
 | Notebook | Writes |
 |---|---|
@@ -56,7 +58,6 @@ Notebooks must run top to bottom in order 01 → 07; each writes the inputs of t
 | 02_data_exploration | nothing (EDA only) |
 | 03_feature_engineering | `data/processed/features_daily.parquet` |
 | 04_baseline_models | `data/models/x44_<model>_h{1..5}.joblib`, `<tag>.json`, `uncertainty.json` |
-| 05_flood_zones | `data/processed/zones_h3.geojson` |
 | 06_forecast_rain | `data/models/x44_ridge_delta_nwp*` (+ rain setup in its manifest), `uncertainty.json` key `ridge_delta_nwp` |
 | 07_lstm | nothing (LSTM vs Ridge/LightGBM comparison; LSTM is not served) |
 
@@ -101,7 +102,8 @@ check outputs/plots for errors).
 - Spatial labels: EOS-RS flood proxy (Sentinel Asia, 23 Nov 2025). Copernicus GFM misses urban flooding
   (6 vs 72 km² in the city) — use it only outside the city.
 - Critical stage per cell assumes the flooded share grows linearly from 7.40 m (none) to 9.97 m (2025
-  extent); one mapped event cannot validate this.
+  extent); one mapped event cannot validate this. The EOS-RS image is from 23 Nov, when X.44 was only 7.3–7.9 m, yet its
+  extent is pinned to the 9.97 m peak, so critical stages may be too high (listed as a limitation in the report).
 - Forecast uncertainty (`uncertainty.json`) is split by forecast stage (< 4 m / ≥ 4 m); one global sigma
   produced ~10 % flood probability on every calm day.
 

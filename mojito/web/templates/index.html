@@ -29,8 +29,9 @@
     <section class="card status" id="status-card">
       <div class="status-row">
         <div>
-          <div class="label">ระดับน้ำ X.44 (หาดใหญ่ใน) วันนี้</div>
+          <div class="label" id="today-label">ระดับน้ำ X.44 (หาดใหญ่ใน)</div>
           <div class="value" id="today-stage">–</div>
+          <div class="detail" id="today-detail"></div>
         </div>
         <span class="badge" id="today-alert">–</span>
       </div>
@@ -45,18 +46,26 @@
       <div class="model-line" id="model-line"></div>
     </section>
 
-    <section class="card">
-      <div class="label">ระดับน้ำ X.44 ย้อนหลัง 10 วัน และพยากรณ์ 5 วัน (ม.รทก.)</div>
+    <section class="card chart-card" id="chart-card" role="button" tabindex="0" aria-label="ขยายกราฟระดับน้ำเต็มจอ">
+      <div class="chart-head">
+        <div class="label">ระดับน้ำ X.44 เทียบตลิ่ง ย้อนหลัง 10 วัน และพยากรณ์ 5 วัน (ม., 0 = ตลิ่ง)</div>
+        <span class="expand" aria-hidden="true">⤢ ขยาย</span>
+      </div>
       <svg id="chart" viewBox="0 0 360 190" role="img" aria-label="กราฟระดับน้ำ X.44"></svg>
       <div class="chart-legend">
         <span><i class="swatch line"></i>วัดจริง</span>
         <span><i class="swatch dashed"></i>พยากรณ์</span>
         <span><i class="swatch band"></i>ช่วงความคลาดเคลื่อน</span>
       </div>
+      <div class="chart-legend">
+        <span><i class="swatch zone-normal"></i>ต่ำกว่าตลิ่งเกิน 1 ม.</span>
+        <span><i class="swatch zone-watch"></i>ใกล้ตลิ่ง</span>
+        <span><i class="swatch zone-bank"></i>ล้นตลิ่ง</span>
+      </div>
     </section>
 
     <footer class="notes">
-      <p><strong>วิธีอ่านแผนที่:</strong> สีของแต่ละโซนคือสัดส่วนพื้นที่ที่คาดว่าจะท่วม คลิกโซนเพื่อดูว่าเริ่มท่วมเมื่อระดับน้ำ X.44 สูงเท่าไร</p>
+      <p><strong>วิธีอ่านแผนที่:</strong> สีของแต่ละโซนคือสัดส่วนพื้นที่ที่คาดว่าจะท่วม คลิกโซนเพื่อดูว่าเริ่มท่วมเมื่อน้ำที่ X.44 ล้นตลิ่งเท่าไร</p>
       <p><strong>ข้อจำกัด:</strong> แม่นยำที่สุดในช่วง 1–2 วัน · ล่วงหน้า 3–5 วันอาศัยพยากรณ์ฝน GFS ซึ่งมักให้ฝนหนักต่ำกว่าจริง ความคลาดเคลื่อนจึงสูง ·
         แผนที่เรียนจากน้ำท่วมครั้งเดียว (พ.ย. 2568) · ต้นแบบเพื่อการศึกษา ไม่ใช่ประกาศเตือนภัยทางการ</p>
       <p class="source">โมเดล: LSTM อ่านระยะจากตลิ่ง 6 สถานีและฝนย้อนหลัง 30 วัน · ข้อมูล: ThaiWater/HII, กรมชลประทาน, ERA5 / ECMWF analysis และพยากรณ์ฝน GFS (Open-Meteo), Copernicus DEM, Sentinel Asia (EOS-RS)</p>
@@ -75,6 +84,50 @@
       <div class="ramp-ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
     </div>
   </main>
+
+  <div class="modal" id="chart-modal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="chart-modal-title">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="chart-modal-title">ระดับน้ำ X.44 (หาดใหญ่ใน) เทียบตลิ่ง ย้อนหลัง 10 วัน และพยากรณ์ 5 วัน</div>
+          <div class="label" id="chart-modal-sub"></div>
+        </div>
+        <button type="button" class="close" id="chart-modal-close" aria-label="ปิด">✕</button>
+      </div>
+      <svg id="chart-large" viewBox="0 0 1000 520" role="img" aria-label="กราฟระดับน้ำ X.44 แบบขยาย"></svg>
+      <div class="chart-legend">
+        <span><i class="swatch line"></i>วัดจริง</span>
+        <span><i class="swatch dashed"></i>พยากรณ์ (สีจุดตามระดับเตือน)</span>
+        <span><i class="swatch band"></i>ช่วงความคลาดเคลื่อน ±</span>
+        <span><i class="swatch zone-normal"></i>ต่ำกว่าตลิ่งเกิน 1 ม.</span>
+        <span><i class="swatch zone-watch"></i>ใกล้ตลิ่ง</span>
+        <span><i class="swatch zone-bank"></i>ล้นตลิ่ง</span>
+        <span>ตัวเลข = ระยะจากตลิ่ง (ม.)</span>
+      </div>
+      <table class="forecast-table" id="chart-modal-table"></table>
+    </div>
+  </div>
+
+  <div class="modal" id="live-modal" hidden>
+    <div class="modal-box live-box" role="dialog" aria-modal="true" aria-labelledby="live-title" aria-describedby="live-status">
+      <div class="modal-title" id="live-title"><span class="live-dot"></span>กำลังดึงข้อมูลสด</div>
+      <p class="hint">ดึงข้อมูลล่าสุดจาก ThaiWater และ Open-Meteo แล้วให้ LSTM พยากรณ์ 5 วันข้างหน้า</p>
+      <div class="progress" id="live-progress" role="progressbar" aria-label="ความคืบหน้าการดึงข้อมูลสด"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-fill" id="live-progress-fill"></div>
+      </div>
+      <div class="live-status" id="live-status" aria-live="polite">
+        <span id="live-step">เริ่มต้น…</span>
+        <span id="live-elapsed">0 วินาที</span>
+      </div>
+      <ol class="live-steps" id="live-steps"></ol>
+      <p class="live-error" id="live-error" hidden></p>
+      <div class="live-actions">
+        <button type="button" class="ghost" id="live-retry" hidden>ลองใหม่</button>
+        <button type="button" id="live-cancel">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>

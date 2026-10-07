@@ -1,10 +1,13 @@
 """Flask POC: flood risk map for Hat Yai with a 5-day forecast slider."""
 
+import queue
+import threading
+
 import pandas
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request
 
 from mojito import config
-from mojito.web.forecast import ForecastService
+from mojito.web.forecast import LIVE_STEPS, ForecastService
 
 # Opening date of the page: the end of the day before the Nov 2025 flood
 # crossed the low-lying flood level, so the demo starts on the event
@@ -13,6 +16,8 @@ DEMO_DATE = "2025-11-21"
 
 def create_app():
     app = Flask(__name__)
+    # Re-read index.html when it changes so it never runs against a newer app.js
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
     service = ForecastService()
     stations = pandas.read_parquet(config.RAW_DIR / "stations.parquet")
     key_stations = stations[
@@ -52,6 +57,39 @@ def create_app():
         except Exception as error:  # an upstream API being down must not crash the page
             app.logger.exception("live forecast failed")
             abort(503, description=f"ดึงข้อมูลสดไม่สำเร็จ: {error}")
+
+    @app.get("/api/forecast/live/stream")
+    def forecast_live_stream():
+        """Server-sent events for the live button: `start` (the step list), one `progress`
+        per step as it starts, then `result` with the forecast or `failed` with a message."""
+        events = queue.Queue()
+        started = []
+
+        def progress(label):
+            started.append(label)
+            events.put(("progress", {"step": len(started) - 1, "label": label}))
+
+        def work():
+            try:
+                events.put(("result", service.forecast_live(progress)))
+            except Exception as error:  # an upstream API being down must not crash the page
+                app.logger.exception("live forecast failed")
+                events.put(("failed", {"message": f"ดึงข้อมูลสดไม่สำเร็จ: {error}"}))
+
+        # The forecast runs in its own thread, so it finishes (and fills the cache) even if
+        # the page stops listening
+        threading.Thread(target=work, daemon=True).start()
+
+        def stream():
+            steps = [{"group": group, "label": label} for group, label in LIVE_STEPS]
+            yield f"event: start\ndata: {app.json.dumps({'steps': steps})}\n\n"
+            while True:
+                kind, data = events.get()
+                yield f"event: {kind}\ndata: {app.json.dumps(data)}\n\n"
+                if kind != "progress":
+                    return
+
+        return Response(stream(), mimetype="text/event-stream", headers={"Cache-Control": "no-cache"})
 
     return app
 
