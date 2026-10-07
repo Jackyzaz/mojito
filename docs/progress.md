@@ -49,6 +49,15 @@ POC ครบเส้นทาง: ดึงข้อมูล → EDA → feat
   - รอบ 2: ตาราง 10/รูป 14 เปลี่ยนจาก "ทุกวัน" เป็น **วันปกติ (ระดับจริง < 4 ม.)** คำนวณใหม่ใน notebook 03
     (MAE LSTM/persistence 0.13–0.38 / 0.11–0.28, RMSE 0.20–0.62 / 0.22–0.75 → ข้อสรุปเดิม), เพิ่มข้อจำกัด: ภาพ EOS-RS 23 พ.ย.
     ถ่ายตอน X.44 ~7.3–7.9 ม. แต่ผูกกับ 9.97 ม. (ตาราง 13 + 3.4.2 + notebook 04), ใส่เลขหน้าในสารบัญ (บทคัดย่อไม่มีเลขหน้า)
+  - รอบ 3 (37 หน้า, ตาราง 14, โค้ด 5): ใส่โค้ดจริงจาก repo — โค้ดที่ 1 `FloodLSTM` (3.4.1), 2 `_loss` + ลูป `fit` early stopping,
+    3 split/fit/predict/metrics จาก notebook 03, 3.4.3 ใหม่ Flask: โค้ดที่ 4 route ย้อนดู + SSE, 5 `ForecastService._predict`;
+    3.5 ลิงก์ https://github.com/Jackyzaz/mojito + ตารางที่ 10 โครงสร้าง repo (ตารางเดิม 10–13 → 11–14); README เขียนใหม่ตาม notebook/01→04
+
+- **ใบปลิว A4 สองหน้า (2026-10-07):** `docs/poster/build_poster.py` สร้างไฟล์ Impress (odfpy) + PDF
+  `docs/poster/โปสเตอร์ - พรุ่งนี้น้ำจะท่วมไหมนะ.odp/.pdf`; หน้า 1 = ปัญหา/screenshot เว็บ/ตัวเลขเด่น/ภาพรวมระบบ,
+  หน้า 2 = LSTM + split, ตารางผล test, กราฟ พ.ย. 68, แผนที่โซน, QR repo, สรุป/ข้อจำกัด
+  - กราฟวาดใหม่ขนาดพอดี A4 จากข้อมูลจริง (`docs/poster/assets/`: ระดับสูงสุดรายปี 5/58 ปี ≥ 7.40 ม., LSTM t+1/t+3
+    ผ่าน `ForecastService`, แผนที่โซนออก 21 พ.ย. 68) — สร้างซ้ำ: `uv run --with odfpy --with "qrcode[pil]" python docs/poster/build_poster.py`
 
 ## เสร็จแล้ว
 
