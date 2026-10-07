@@ -20,8 +20,29 @@ uv run jupyter lab                        # notebooks
 uv run mojito-web                         # web POC on http://127.0.0.1:5050 (.claude/launch.json: mojito-web)
 # run a notebook headless (GDAL var silences sidecar-file probing on remote COGs)
 GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR uv run jupyter nbconvert --to notebook --execute --inplace \
-  --ExecutePreprocessor.timeout=-1 notebooks/<name>.ipynb
+  --ExecutePreprocessor.timeout=-1 notebook-minimal/<name>.ipynb
 ```
+
+### Minimal pipeline (`notebook-minimal/`, the one presented to the instructor)
+
+Small LSTM-only pipeline meant to be explained end to end. Run 01 → 03:
+
+| Notebook | Writes |
+|---|---|
+| 01_data | `data/raw/` stations, waterlevel_tele, era5_hourly, nwp_rain_previous_runs (same files as the full pipeline; skips existing) |
+| 02_features | `data/processed/minimal_daily.parquet` |
+| 03_lstm | nothing (trains a 5-seed LSTM ensemble and evaluates on test) |
+
+- Inputs: daily max **distance to bank** (`{station}_bank` = level − `config.BANK_LEVEL_M`, ThaiWater `min_bank`)
+  for X.44, X.90, X.173A, X.174, SLA007, SLA005 + ERA5 basin rain (7 per day, 30-day window), plus
+  `rain_next{h}d` after the LSTM (ERA5 observed in train, GFS × 2024 bias multiplier in validation/test).
+- Target: X.44 daily max (m MSL) at t+1..t+5, learned as the change from today (`lstm.LSTMForecaster`).
+- Split (its own, not `features.TRAIN_END`): train ≤ 2024-12-31, validation 2025-01-01 → 2025-09-30,
+  test ≥ 2025-10-01. Validation has no high-water day (max 3.26 m), so early stopping (patience 15) is driven by
+  calm days.
+- The web app does not use this pipeline.
+
+### Full pipeline (`notebooks/archive/`, still what the web app serves)
 
 Notebooks must run top to bottom in order 01 → 07; each writes the inputs of the next:
 

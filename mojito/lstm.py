@@ -99,11 +99,13 @@ class LSTMForecaster:
         error = (prediction - torch.nan_to_num(target)) ** 2 * weight
         return (error * known).sum() / known.sum().clamp(min=1)
 
-    def fit(self, train_table, train_days, epochs=60, validation_table=None, validation_days=None):
+    def fit(self, train_table, train_days, epochs=60, validation_table=None, validation_days=None,
+            patience=None):
         """Train on windows ending on `train_days`.
 
         With a validation set, keep the weights of the epoch with the lowest
-        validation loss (early stopping) and remember that epoch count. The
+        validation loss (early stopping) and remember that epoch count; with
+        `patience`, stop once that many epochs pass without improvement. The
         validation table may differ from the training table, e.g. forecast
         rain instead of observed rain."""
         torch.manual_seed(self.seed)
@@ -126,11 +128,12 @@ class LSTMForecaster:
             vy = torch.tensor(vy / self.target_std, dtype=torch.float32)
             vlevel = torch.tensor(vlevel, dtype=torch.float32)
 
-        self.history = []
+        self.history, self.train_history = [], []
         best_state, best_loss = None, numpy.inf
         for epoch in range(epochs):
             self.network.train()
             order = torch.randperm(len(x))
+            batch_losses = []
             for start in range(0, len(x), self.batch_size):
                 batch = order[start : start + self.batch_size]
                 optimiser.zero_grad()
@@ -138,6 +141,8 @@ class LSTMForecaster:
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.network.parameters(), 1.0)
                 optimiser.step()
+                batch_losses.append(loss.item())
+            self.train_history.append(float(numpy.mean(batch_losses)))
 
             if validation_table is not None:
                 self.network.eval()
@@ -148,6 +153,8 @@ class LSTMForecaster:
                     best_loss = validation_loss
                     best_state = {k: v.clone() for k, v in self.network.state_dict().items()}
                     self.best_epoch = epoch + 1
+                elif patience is not None and epoch + 1 - self.best_epoch >= patience:
+                    break
 
         if best_state is not None:
             self.network.load_state_dict(best_state)

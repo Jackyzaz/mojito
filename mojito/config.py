@@ -28,6 +28,16 @@ WATERLEVEL_STATIONS = {
     "ONE038": {"id": 1109527, "name": "ปลายคลองอู่ตะเภา", "agency": "HII"},
 }
 
+# Lowest bank (m MSL) from ThaiWater `min_bank` (data/raw/stations.parquet)
+BANK_LEVEL_M = {
+    "X.44": 7.15,
+    "X.90": 9.34,
+    "X.173A": 16.13,
+    "X.174": 8.88,
+    "SLA007": 1.59,
+    "SLA005": 0.97,
+}
+
 RAIN_STATIONS = {
     "48569": {"id": 3749, "name": "สนามบินหาดใหญ่", "agency": "TMD"},
     "48568": {"id": 3748, "name": "สงขลา", "agency": "TMD"},
