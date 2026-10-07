@@ -7,14 +7,19 @@
 
 POC ครบเส้นทาง: ดึงข้อมูล → EDA → feature → โมเดลทำนายระดับน้ำ X.44 (Ridge / LightGBM / LSTM, + พยากรณ์ฝน) → heatmap รายโซน → เว็บ (ย้อนดู + ข้อมูลสด)
 
-### Minimal pipeline สำหรับนำเสนอ (branch `minimal-model`, `notebook-minimal/01→03`)
+### Minimal pipeline สำหรับนำเสนอ (branch `minimal-model`, `notebook/01→03`)
 - notebook เดิม 01–07 ย้ายไป `notebooks/archive/` (เว็บยังใช้ผลจาก pipeline เดิม)
 - input: **ระยะจากตลิ่ง** (ระดับ − `min_bank`) 6 สถานี + ฝน ERA5 ลุ่มน้ำ = 7 features × 30 วัน, + พยากรณ์ฝน GFS ปรับ bias หลัง LSTM
-- target: ระดับ X.44 t+1…t+5 (ทำนายการเปลี่ยนแปลง) · LSTM hidden 32, dropout 0.3, early stopping patience 15, เฉลี่ย 5 seed
+- target: ระดับ X.44 t+1…t+5 (ทำนายการเปลี่ยนแปลง) · LSTM hidden 32, dropout 0.3, early stopping patience 15, seed เดียว (หยุด epoch 27, ใช้ epoch 12)
 - split ใหม่: train ≤ 2024 (73%) · val ม.ค.–ก.ย. 2025 (11%, ไม่มีวันน้ำหลาก) · test ต.ค. 2025+ (16%)
-- ผล test MAE วันน้ำหลาก h=1…5: **0.94 / 1.46 / 2.31 / 2.94 / 3.38** vs persistence 1.35 / 2.51 / 3.61 / 4.24 / 4.78
-  เตือน ≥ 7.40 ม. ถูก 5/5/3/2/1 จาก 6, เตือนผิดรวม 5 (persistence 15); MAE ทุกวันพอๆ กับ persistence
+- ผล test MAE วันน้ำหลาก h=1…5: **0.96 / 1.55 / 2.34 / 2.96 / 3.31** vs persistence 1.35 / 2.51 / 3.61 / 4.24 / 4.78
+  เตือน ≥ 7.40 ม. ถูก 5/5/4/2/2 จาก 6, เตือนผิดรวม 7 (persistence 15); MAE ทุกวันแย่กว่าเล็กน้อยแต่ RMSE ทุกวันดีกว่า
 - `lstm.LSTMForecaster.fit` มี `patience` และเก็บ `train_history`; `config.BANK_LEVEL_M`
+- **เว็บเปลี่ยนมาใช้ LSTM นี้แล้ว** (โมเดลตัวเดียวกับ notebook 03 บันทึกเป็น `data/models/x44_lstm.*`)
+  - โค้ดสร้างตารางย้ายไป `mojito/minimal.py`; โหมดย้อนดูใช้พยากรณ์ GFS ปรับ bias เสมอ → ย้อนดูได้ตั้งแต่ 29 ก.พ. 2567
+  - ค่าย้อนดูช่วง test ตรงกับ notebook (เช่น ออก 21 พ.ย. 68: 6.92 / 8.29 / 8.70 / 8.48 / 8.44 ม.)
+  - โหมดข้อมูลสด (`realtime.py`) ดึงแค่ 6 สถานี + ERA5/IFS + GFS ล่าสุด (~13 วินาที)
+  - ช่วง ± บนเว็บ = RMSE บน test แยกตามระดับทำนาย (validation ไม่มีวันน้ำสูง)
 
 ## เสร็จแล้ว
 

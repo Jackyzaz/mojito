@@ -2,11 +2,13 @@
 
 Two modes share one prediction path:
 
-- replay: any past date in the feature table, as if issued at the end of
-  that day. From March 2024 the archived rain forecasts of that day feed the
-  rain-aware model; earlier dates fall back to the model without rain.
+- replay: any past date of the minimal daily table, as if issued at the end
+  of that day. The archived, bias-corrected GFS forecast of that day is the
+  rain input, so only days from March 2024 (archived forecasts) can be shown.
 - live: `mojito.realtime` fetches the last weeks of data and today's rain
   forecast. The result is cached for a while so page loads do not refetch.
+
+Both run the LSTM saved by notebook/03_lstm.ipynb.
 """
 
 import datetime
@@ -14,20 +16,17 @@ import json
 import threading
 
 import geopandas
+import joblib
 import pandas
 
-from mojito import config, features, models, realtime, spatial
+from mojito import config, features, minimal, realtime, spatial
 
-PLAIN_MODEL = "ridge_delta"
-RAIN_MODEL = "ridge_delta_nwp"
+MODEL_NAME = "lstm"
+MODEL_LABEL = "LSTM (ระยะจากตลิ่ง 6 สถานี + ฝน) + พยากรณ์ฝน GFS"
+MODELS_DIR = config.DATA_DIR / "models"
 LIVE_CACHE = datetime.timedelta(minutes=30)
 # Zones whose expected flooded share is below this are drawn transparent
 MIN_SHARE_SHOWN = 0.02
-
-MODEL_LABELS = {
-    PLAIN_MODEL: "Ridge (ระดับน้ำ + ฝนที่ตกแล้ว)",
-    RAIN_MODEL: "Ridge + พยากรณ์ฝน GFS",
-}
 
 ALERT_STEPS = [
     (0.0, "normal", "ปกติ"),
@@ -46,25 +45,26 @@ def alert_for(stage):
 
 class ForecastService:
     def __init__(self):
-        self.forecasters = {
-            PLAIN_MODEL: models.load(f"x44_{PLAIN_MODEL}"),
-            RAIN_MODEL: models.load(f"x44_{RAIN_MODEL}"),
-        }
-        self.rain_setup = models.load_manifest(f"x44_{RAIN_MODEL}")["extra"]["rain"]
-        self.uncertainty = json.loads((models.MODELS_DIR / "uncertainty.json").read_text())
+        self.model = joblib.load(MODELS_DIR / "x44_lstm.joblib")
+        manifest = json.loads((MODELS_DIR / "x44_lstm.json").read_text())
+        self.gfs_scale = {int(h): value for h, value in manifest["gfs_scale"].items()}
+        self.uncertainty = json.loads((MODELS_DIR / "uncertainty.json").read_text())
         self.zones = geopandas.read_file(config.DATA_DIR / "processed" / "zones_h3.geojson")
 
-        table = pandas.read_parquet(config.DATA_DIR / "processed" / "features_daily.parquet")
-        nwp_daily = features.nwp_daily_rain(pandas.read_parquet(config.RAW_DIR / "nwp_rain_previous_runs.parquet"))
-        for model in self.rain_setup["nwp_models"]:
-            table = features.add_forecast_rain(table, nwp_daily, model)
-        self.table = features.combine_forecast_rain(table, self.rain_setup)
+        # Replay always uses the archived forecast, never the observed future rain of the training rows
+        table = pandas.read_parquet(config.DATA_DIR / "processed" / "minimal_daily.parquet")
+        for h in features.HORIZONS:
+            table[f"rain_next{h}d"] = table[f"gfs_rain_next{h}d"]
+        self.table = table
 
         self._live = None
         self._live_lock = threading.Lock()
 
+    def _can_forecast(self, table):
+        return table["x44_max"].notna() & table[minimal.RAIN_NEXT].notna().all(axis=1)
+
     def dates(self):
-        days = self.table.index[self.table["x44_max"].notna()]
+        days = self.table.index[self._can_forecast(self.table)]
         return {"first": days.min().date().isoformat(), "last": days.max().date().isoformat()}
 
     def zones_geojson(self):
@@ -75,6 +75,8 @@ class ForecastService:
         day = pandas.Timestamp(day)
         if day not in self.table.index or pandas.isna(self.table.at[day, "x44_max"]):
             raise KeyError(f"ไม่มีข้อมูลระดับน้ำ X.44 ของวันที่ {day.date()}")
+        if not self._can_forecast(self.table).loc[day]:
+            raise KeyError(f"ไม่มีพยากรณ์ฝนย้อนหลังของวันที่ {day.date()}")
         result = self._predict(self.table, day)
         result["mode"] = "replay"
         return result
@@ -83,28 +85,25 @@ class ForecastService:
         with self._live_lock:
             if self._live and datetime.datetime.now() - self._live[0] < LIVE_CACHE:
                 return self._live[1]
-            table, issue_day, info = realtime.build_live_table(self.rain_setup)
+            table, issue_day, info = realtime.build_live_table(self.gfs_scale)
             result = self._predict(table, issue_day)
             result.update(mode="live", live=info)
             self._live = (datetime.datetime.now(), result)
             return result
 
     def _predict(self, table, day):
-        row = table.loc[[day]]
-        rain_columns = [f"rain_next{h}d" for h in features.HORIZONS]
-        uses_rain = bool(row[rain_columns].notna().all(axis=None))
-        model_name = RAIN_MODEL if uses_rain else PLAIN_MODEL
-
+        # The LSTM reads the 30 days ending on `day` from the table itself
+        stages = self.model.predict(table, [day]).iloc[0]
         horizons = []
-        for model in self.forecasters[model_name]:
-            stage = float(model.predict(row).iloc[0])
-            sigma = spatial.forecast_sigma(self.uncertainty, model_name, model.horizon, stage)
+        for h in features.HORIZONS:
+            stage = float(stages[f"h{h}"])
+            sigma = spatial.forecast_sigma(self.uncertainty, MODEL_NAME, h, stage)
             share = spatial.zone_flood_probability(self.zones, stage, sigma)
-            valid_day = day + pandas.Timedelta(days=model.horizon)
+            valid_day = day + pandas.Timedelta(days=h)
             observed = self.table["x44_max"].get(valid_day)
-            rain_total = row[f"rain_next{model.horizon}d"].iloc[0] if uses_rain else None
+            rain_total = table.at[day, f"rain_next{h}d"]
             horizons.append({
-                "h": model.horizon,
+                "h": h,
                 "date": valid_day.date().isoformat(),
                 "stage": round(stage, 2),
                 "sigma": sigma,
@@ -120,12 +119,11 @@ class ForecastService:
         history = table["x44_max"].loc[day - pandas.Timedelta(days=9):day]
         return {
             "issued": day.date().isoformat(),
-            "model": model_name,
-            "model_label": MODEL_LABELS[model_name],
+            "model": MODEL_NAME,
+            "model_label": MODEL_LABEL,
             "today": {
                 "stage": round(today_stage, 2),
                 "alert": alert_for(today_stage),
-                "rain_3d_mm": _round(table.at[day, "gauge_rain_3d"], 1),
             },
             "history": [{"date": d.date().isoformat(), "stage": _round(v)} for d, v in history.items()],
             "horizons": horizons,

@@ -20,10 +20,10 @@ uv run jupyter lab                        # notebooks
 uv run mojito-web                         # web POC on http://127.0.0.1:5050 (.claude/launch.json: mojito-web)
 # run a notebook headless (GDAL var silences sidecar-file probing on remote COGs)
 GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR uv run jupyter nbconvert --to notebook --execute --inplace \
-  --ExecutePreprocessor.timeout=-1 notebook-minimal/<name>.ipynb
+  --ExecutePreprocessor.timeout=-1 notebook/<name>.ipynb
 ```
 
-### Minimal pipeline (`notebook-minimal/`, the one presented to the instructor)
+### Minimal pipeline (`notebook/`, the one presented to the instructor)
 
 Small LSTM-only pipeline meant to be explained end to end. Run 01 → 03:
 
@@ -31,7 +31,7 @@ Small LSTM-only pipeline meant to be explained end to end. Run 01 → 03:
 |---|---|
 | 01_data | `data/raw/` stations, waterlevel_tele, era5_hourly, nwp_rain_previous_runs (same files as the full pipeline; skips existing) |
 | 02_features | `data/processed/minimal_daily.parquet` |
-| 03_lstm | nothing (trains a 5-seed LSTM ensemble and evaluates on test) |
+| 03_lstm | `data/models/x44_lstm.joblib`, `x44_lstm.json` (features, GFS bias multipliers), `uncertainty.json` key `lstm` |
 
 - Inputs: daily max **distance to bank** (`{station}_bank` = level − `config.BANK_LEVEL_M`, ThaiWater `min_bank`)
   for X.44, X.90, X.173A, X.174, SLA007, SLA005 + ERA5 basin rain (7 per day, 30-day window), plus
@@ -40,9 +40,13 @@ Small LSTM-only pipeline meant to be explained end to end. Run 01 → 03:
 - Split (its own, not `features.TRAIN_END`): train ≤ 2024-12-31, validation 2025-01-01 → 2025-09-30,
   test ≥ 2025-10-01. Validation has no high-water day (max 3.26 m), so early stopping (patience 15) is driven by
   calm days.
-- The web app does not use this pipeline.
+- Table steps live in `mojito/minimal.py` (notebook 02 calls them one by one; web and live mode reuse them).
+- The web app serves this LSTM (the same seed-0 model trained to 2024, not refit). Replay always feeds the
+  archived bias-corrected GFS forecast (`gfs_rain_next{h}d`), so replay starts at 2024-02-29; test-period replay
+  matches notebook 03 exactly. `uncertainty.json["lstm"]` is stage-split RMSE on test (validation has no high water).
+- The web still needs `data/processed/zones_h3.geojson` from `notebooks/archive/05_flood_zones`.
 
-### Full pipeline (`notebooks/archive/`, still what the web app serves)
+### Full pipeline (`notebooks/archive/`, kept for reference; its Ridge models are no longer served)
 
 Notebooks must run top to bottom in order 01 → 07; each writes the inputs of the next:
 
@@ -68,7 +72,8 @@ check outputs/plots for errors).
 - `mojito/models.py` — `HorizonModel` (one model per horizon), save/load under `data/models/`; manifest
   `extra` carries prediction-time settings (rain forecast models and bias multipliers)
 - `mojito/evaluation.py` — shared scores (MAE all / high-water days, 7.40 m alert hits), stage-split RMSE
-- `mojito/realtime.py` — live mode: last 40 days of every source → same `build_daily_table` → today's row
+- `mojito/minimal.py` — minimal pipeline table: distance to bank, basin rain, targets, split, GFS rain + bias
+- `mojito/realtime.py` — live mode: last 45 days of the 6 stations + ERA5/IFS → `minimal.build_table` + latest GFS
 - `mojito/lstm.py` — PyTorch LSTM (30-day window → 5 horizons, delta target), CPU-only torch via uv index
 - `mojito/spatial.py` — terrain features (pysheds), critical stage per cell, H3 zones, zone flood probability
 - `mojito/web/` — Flask app (`create_app`), `forecast.py` (ForecastService), Leaflet page in templates/static
@@ -87,10 +92,10 @@ check outputs/plots for errors).
   older than needed (`FORECAST_LEAD_OFFSET`). GFS × 2024 bias multiplier was chosen on validation.
   Forecasts give only 20–45 % of heavy rain, which limits h=3–5 skill.
 - `nwp_*` / `rain_next*` columns are excluded from `feature_columns()`; rain-aware models add them explicitly.
-- Web picks `ridge_delta_nwp` when the day's `rain_next{h}d` exist, else `ridge_delta`. Live mode fills
-  the ERA5 gap (~5 days) with ECMWF IFS analysis and today's gauge rain with ThaiWater `rain_24h`.
-- LSTM (notebook 07) did not beat Ridge overall on this small daily data set (overfits within ~20 epochs,
-  more false alarms); Ridge + forecast rain stays the served model.
+- Web serves the minimal-pipeline LSTM (`x44_lstm`). Live mode fills the ERA5 gap (~5 days) with ECMWF IFS
+  analysis and uses the latest GFS run × the manifest's bias multipliers.
+- Archive notebook 07 (46 features, old split) found LSTM did not beat Ridge overall; the minimal LSTM (bank
+  distances, new split) beats persistence on high-water days and is the one presented and served.
 - X.44 telemetry is continuous from 2020 only; RID 06:00 daily values (2017+) differ from the daily max by up
   to 1.5 m on rising days, so they are not mixed into the target.
 - Spatial labels: EOS-RS flood proxy (Sentinel Asia, 23 Nov 2025). Copernicus GFM misses urban flooding
